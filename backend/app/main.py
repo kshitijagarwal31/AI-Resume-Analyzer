@@ -3,12 +3,13 @@ from sqlalchemy import text
 
 from app.database import engine, Base
 from app import models
-from app.routers import auth
+from app.routers import auth, resumes
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Resume Analyzer & Parser")
 app.include_router(auth.router)
+app.include_router(resumes.router)
 
 
 @app.get("/health")
