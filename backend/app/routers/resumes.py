@@ -1,3 +1,6 @@
+from pathlib import Path
+import uuid
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
@@ -6,14 +9,13 @@ from app.dependencies import get_current_user
 from app.models import Resume, User
 from app.schemas import ResumeOut
 
-import uuid
-from pathlib import Path
+from app.services.parser import extract_text_from_pdf
 
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 UPLOAD_DIR = Path("uploads")
-ALLOWED_EXTENSIONS = {".pdf", ".docx"}
+ALLOWED_EXTENSIONS = {".pdf"}
 MAX_SIZE = 5 * 1024 * 1024
 
 
@@ -23,7 +25,7 @@ def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db), c
     original_name = (file.filename or "resume")[:255]
     ext = Path(original_name).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are allowed")
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
     content = file.file.read(MAX_SIZE + 1)
     if len(content) == 0:
@@ -34,11 +36,17 @@ def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db), c
     UPLOAD_DIR.mkdir(exist_ok=True)
     file_path = UPLOAD_DIR / f"{uuid.uuid4().hex}{ext}"
     file_path.write_bytes(content)
+    try:
+        text = extract_text_from_pdf(str(file_path))
+    except Exception:
+        text = ""
 
     resume = Resume(
         user_id = current_user.id,
         filename =  original_name,
-        file_path = str(file_path)
+        file_path = str(file_path),
+        extracted_text =  text or None,
+        status = "text_extracted" if text else "failed"
     )
 
     db.add(resume)
